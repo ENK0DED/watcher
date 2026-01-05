@@ -54,6 +54,7 @@ jobs:
         with:
           toolchain: stable
           targets: ${{ matrix.settings.target }}
+      - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v6
         with:
           node-version: 24
@@ -99,6 +100,7 @@ jobs:
       - build
     steps:
       - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
@@ -143,6 +145,7 @@ jobs:
       - build
     steps:
       - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
       - uses: actions/setup-node@v6
         with:
           node-version: 24
