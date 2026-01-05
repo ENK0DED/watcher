@@ -1,4 +1,4 @@
-name: Watcher build on Linux
+name: Watcher build
 on:
   push:
     branches:
@@ -16,28 +16,39 @@ jobs:
       matrix:
         settings:
           - target: x86_64-apple-darwin
-            flags: '-x'
+            host: macos-13
+            flags: ''
           - target: aarch64-apple-darwin
-            flags: '-x'
+            host: macos-14
+            flags: ''
           - target: x86_64-pc-windows-msvc
+            host: ubuntu-latest
             flags: '-x'
           - target: aarch64-pc-windows-msvc
+            host: ubuntu-latest
             flags: '-x'
           - target: x86_64-unknown-linux-gnu
+            host: ubuntu-latest
             flags: '--use-napi-cross'
           - target: aarch64-unknown-linux-gnu
+            host: ubuntu-latest
             flags: '--use-napi-cross'
           - target: x86_64-unknown-linux-musl
+            host: ubuntu-latest
             flags: '-x'
           - target: aarch64-unknown-linux-musl
+            host: ubuntu-latest
             flags: '-x'
           - target: armv7-unknown-linux-gnueabihf
+            host: ubuntu-latest
             flags: '--use-napi-cross'
           - target: powerpc64le-unknown-linux-gnu
+            host: ubuntu-latest
             flags: '--use-napi-cross'
           - target: s390x-unknown-linux-gnu
+            host: ubuntu-latest
             flags: '--use-napi-cross'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v6
       - name: Cache cargo registry
@@ -59,10 +70,12 @@ jobs:
         with:
           node-version: 24
       - name: Install ziglang
+        if: matrix.settings.host == 'ubuntu-latest'
         uses: mlugg/setup-zig@v2
         with:
           version: 0.15.2
       - name: Install cargo toolchains
+        if: matrix.settings.host == 'ubuntu-latest'
         uses: taiki-e/install-action@v2
         env:
           GITHUB_TOKEN: ${{ github.token }}
