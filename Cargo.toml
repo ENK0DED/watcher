@@ -1,0 +1,15 @@
+[workspace]
+members = ["watcher"]
+resolver = "2"
+
+[workspace.dependencies]
+napi = { version = "3", default-features = false, features = ["async", "napi10"] }
+napi-build = "2"
+napi-derive = "3"
+notify = { version = "8", default-features = false, features = ["serde"] }
+notify-debouncer-full = "0.6"
+globset = "0.4"
+
+[profile.release]
+lto = true
+strip = "symbols"

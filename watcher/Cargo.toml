@@ -1,0 +1,19 @@
+[package]
+edition = "2024"
+name = "watcher"
+license = "MIT"
+rust-version = "1.92.0"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { workspace = true }
+napi-derive = { workspace = true }
+notify = { workspace = true }
+notify-debouncer-full = { workspace = true }
+globset = { workspace = true }
+
+[build-dependencies]
+napi-build = { workspace = true }
