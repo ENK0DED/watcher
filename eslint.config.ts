@@ -15,7 +15,7 @@ export default [
         ...globals.es2026,
         ...globals.node,
       },
-      parserOptions: { projectService: { allowDefaultProject: ['eslint.config.ts', '*.config.js'] } },
+      parserOptions: { projectService: { allowDefaultProject: ['*.config.js'] } },
       sourceType: 'module',
     },
   },
