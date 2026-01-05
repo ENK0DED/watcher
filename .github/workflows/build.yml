@@ -1,4 +1,5 @@
 name: Watcher build
+
 on:
   push:
     branches:
@@ -7,7 +8,6 @@ on:
 
 env:
   DEBUG: 'napi:*'
-  MACOSX_DEPLOYMENT_TARGET: '10.13'
 
 jobs:
   build:
@@ -16,17 +16,17 @@ jobs:
       matrix:
         settings:
           - target: x86_64-apple-darwin
-            host: macos-13
+            host: macos-latest
             flags: ''
           - target: aarch64-apple-darwin
-            host: macos-14
+            host: macos-latest
             flags: ''
           - target: x86_64-pc-windows-msvc
-            host: ubuntu-latest
-            flags: '-x'
+            host: windows-latest
+            flags: ''
           - target: aarch64-pc-windows-msvc
-            host: ubuntu-latest
-            flags: '-x'
+            host: windows-11-arm
+            flags: ''
           - target: x86_64-unknown-linux-gnu
             host: ubuntu-latest
             flags: '--use-napi-cross'
