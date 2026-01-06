@@ -170,7 +170,10 @@ pub fn subscribe(env: Env, directory: String, callback: Unknown, options: Option
       }
       Err(errors) => {
         let error_msg = errors.iter().map(|e| e.to_string()).collect::<Vec<_>>().join("; ");
-        tsfn.call(WatchCallbackResult { error: Some(Error::new(Status::GenericFailure, error_msg)), events: vec![] }, napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking);
+        tsfn.call(
+          WatchCallbackResult { error: Some(Error::new(Status::GenericFailure, error_msg)), events: vec![] },
+          napi::threadsafe_function::ThreadsafeFunctionCallMode::NonBlocking,
+        );
       }
     }
   })
