@@ -579,7 +579,6 @@ if (!nativeBinding) {
   throw new Error(`Failed to load native binding`)
 }
 
-const { Subscription, EventType, subscribe } = nativeBinding
+const { Subscription, subscribe } = nativeBinding
 export { Subscription }
-export { EventType }
 export { subscribe }

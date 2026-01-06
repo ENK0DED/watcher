@@ -29,31 +29,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: 24
-
       - uses: oven-sh/setup-bun@v2
-
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-
       - name: Install dependencies
         run: bun install
-
       - name: ESLint
-        run: bun run lint
-
+        run: bun lint
       - name: Cargo fmt
         run: cargo fmt -- --check
-
       - name: Clippy
         run: cargo clippy
-
   build:
     strategy:
       fail-fast: false
@@ -61,64 +53,48 @@ jobs:
         settings:
           - host: macos-latest
             target: x86_64-apple-darwin
-            build: bun run --filter="@enk0ded/watcher" build --target x86_64-apple-darwin
+            build: bun run build --target x86_64-apple-darwin
           - host: macos-latest
             target: aarch64-apple-darwin
-            build: bun run --filter="@enk0ded/watcher" build --target aarch64-apple-darwin
+            build: bun run build --target aarch64-apple-darwin
           - host: windows-latest
             target: x86_64-pc-windows-msvc
-            build: bun run --filter="@enk0ded/watcher" build --target x86_64-pc-windows-msvc
-          - host: windows-latest
-            target: i686-pc-windows-msvc
-            build: bun run --filter="@enk0ded/watcher" build --target i686-pc-windows-msvc
-          - host: windows-latest
-            target: aarch64-pc-windows-msvc
-            build: bun run --filter="@enk0ded/watcher" build --target aarch64-pc-windows-msvc
+            build: bun run build --target x86_64-pc-windows-msvc
+          # - host: windows-latest
+          #   target: aarch64-pc-windows-msvc
+          #   build: yarn build --target aarch64-pc-windows-msvc
           - host: ubuntu-latest
             target: x86_64-unknown-linux-gnu
-            build: bun run --filter="@enk0ded/watcher" build --target x86_64-unknown-linux-gnu --use-napi-cross
+            build: bun run build --target x86_64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-latest
             target: x86_64-unknown-linux-musl
-            build: bun run --filter="@enk0ded/watcher" build --target x86_64-unknown-linux-musl -x
+            build: bun run build --target x86_64-unknown-linux-musl -x
           - host: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            build: bun run --filter="@enk0ded/watcher" build --target aarch64-unknown-linux-gnu --use-napi-cross
+            build: bun run build --target aarch64-unknown-linux-gnu --use-napi-cross
           - host: ubuntu-latest
             target: aarch64-unknown-linux-musl
-            build: bun run --filter="@enk0ded/watcher" build --target aarch64-unknown-linux-musl -x
-          - host: ubuntu-latest
-            target: armv7-unknown-linux-gnueabihf
-            build: bun run --filter="@enk0ded/watcher" build --target armv7-unknown-linux-gnueabihf --use-napi-cross
+            build: bun run build --target aarch64-unknown-linux-musl -x
           - host: ubuntu-latest
             target: aarch64-linux-android
-            build: bun run --filter="@enk0ded/watcher" build --target aarch64-linux-android
+            build: bun run build --target aarch64-linux-android
           - host: ubuntu-latest
-            target: armv7-linux-androideabi
-            build: bun run --filter="@enk0ded/watcher" build --target armv7-linux-androideabi
-          - host: ubuntu-latest
-            target: powerpc64le-unknown-linux-gnu
-            build: bun run --filter="@enk0ded/watcher" build --target powerpc64le-unknown-linux-gnu --use-napi-cross
-          - host: ubuntu-latest
-            target: s390x-unknown-linux-gnu
-            build: bun run --filter="@enk0ded/watcher" build --target s390x-unknown-linux-gnu --use-napi-cross
+            target: wasm32-wasip1-threads
+            build: yarn build --target wasm32-wasip1-threads
     name: stable - ${{ matrix.settings.target }} - node@24
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v6
-
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: 24
-
       - uses: oven-sh/setup-bun@v2
-
       - name: Install
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           targets: ${{ matrix.settings.target }}
-
       - name: Cache cargo
         uses: actions/cache@v5
         with:
@@ -130,12 +106,10 @@ jobs:
             .cargo-cache
             target/
           key: ${{ matrix.settings.target }}-cargo-${{ matrix.settings.host }}
-
       - uses: mlugg/setup-zig@v2
         if: ${{ contains(matrix.settings.target, 'musl') }}
         with:
           version: 0.14.1
-
       - name: Install cargo-zigbuild
         uses: taiki-e/install-action@v2
         if: ${{ contains(matrix.settings.target, 'musl') }}
@@ -143,72 +117,67 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         with:
           tool: cargo-zigbuild
-
       - name: Setup toolchain
         run: ${{ matrix.settings.setup }}
         if: ${{ matrix.settings.setup }}
         shell: bash
-
       - name: Install dependencies
         run: bun install
-
       - name: Build
         run: ${{ matrix.settings.build }}
         shell: bash
-
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: watcher/${{ env.APP_NAME }}.*.node
+          path: |
+            ${{ env.APP_NAME }}.*.node
+            ${{ env.APP_NAME }}.*.wasm
           if-no-files-found: error
 
-  build-freebsd:
-    runs-on: ubuntu-latest
-    name: Build FreeBSD
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Build
-        id: build
-        uses: cross-platform-actions/action@v0.32.0
-        env:
-          DEBUG: napi:*
-          RUSTUP_IO_THREADS: 1
-        with:
-          operating_system: freebsd
-          version: '14.3'
-          memory: 8G
-          cpu_count: 3
-          environment_variables: 'DEBUG RUSTUP_IO_THREADS'
-          shell: bash
-          run: |
-            sudo pkg install -y -f curl node libnghttp2 npm cmake
-            sudo npm install -g yarn --ignore-scripts
-            curl https://sh.rustup.rs -sSf --output rustup.sh
-            sh rustup.sh -y --profile minimal --default-toolchain stable
-            source "$HOME/.cargo/env"
-            echo "~~~~ rustc --version ~~~~"
-            rustc --version
-            echo "~~~~ node -v ~~~~"
-            node -v
-            pwd
-            ls -lah
-            whoami
-            env
-            freebsd-version
-            cd watcher
-            npm install
-            npm run build
-            cd ..
-            rm -rf node_modules
-            rm -rf target
-      - name: Upload artifact
-        uses: actions/upload-artifact@v6
-        with:
-          name: bindings-x86_64-unknown-freebsd
-          path: watcher/${{ env.APP_NAME }}.*.node
-          if-no-files-found: error
+  # build-freebsd:
+  #   runs-on: ubuntu-latest
+  #   name: Build FreeBSD
+  #   steps:
+  #     - uses: actions/checkout@v6
+  #     - name: Build
+  #       id: build
+  #       uses: cross-platform-actions/action@v0.32.0
+  #       env:
+  #         DEBUG: napi:*
+  #         RUSTUP_IO_THREADS: 1
+  #       with:
+  #         operating_system: freebsd
+  #         version: '14.3'
+  #         memory: 8G
+  #         cpu_count: 3
+  #         environment_variables: 'DEBUG RUSTUP_IO_THREADS'
+  #         shell: bash
+  #         run: |
+  #           sudo pkg install -y -f curl node libnghttp2 npm cmake
+  #           sudo npm install -g yarn --ignore-scripts
+  #           curl https://sh.rustup.rs -sSf --output rustup.sh
+  #           sh rustup.sh -y --profile minimal --default-toolchain stable
+  #           source "$HOME/.cargo/env"
+  #           echo "~~~~ rustc --version ~~~~"
+  #           rustc --version
+  #           echo "~~~~ node -v ~~~~"
+  #           node -v
+  #           pwd
+  #           ls -lah
+  #           whoami
+  #           env
+  #           freebsd-version
+  #           npm install
+  #           npm run build
+  #           rm -rf node_modules
+  #           rm -rf target
+  #     - name: Upload artifact
+  #       uses: actions/upload-artifact@v6
+  #       with:
+  #         name: bindings-freebsd
+  #         path: ${{ env.APP_NAME }}.*.node
+  #         if-no-files-found: error
 
   test-macOS-windows-binding:
     name: Test bindings on ${{ matrix.settings.target }} - node@${{ matrix.node }}
@@ -231,36 +200,28 @@ jobs:
             target: x86_64-apple-darwin
             architecture: x64
         node:
-          - '20'
-          - '22'
           - '24'
     runs-on: ${{ matrix.settings.host }}
     steps:
       - uses: actions/checkout@v6
-
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
           architecture: ${{ matrix.settings.architecture }}
-
       - uses: oven-sh/setup-bun@v2
-
       - name: Install dependencies
         run: bun install
-
       - name: Download artifacts
         uses: actions/download-artifact@v7
         with:
           name: bindings-${{ matrix.settings.target }}
-          path: watcher/
-
+          path: .
       - name: List packages
-        run: ls -R watcher/
+        run: ls -R .
         shell: bash
-
       - name: Test bindings
-        run: bun run --filter="@enk0ded/watcher" test
+        run: bun test
 
   test-linux-binding:
     name: Test ${{ matrix.target }} - node@${{ matrix.node }}
@@ -274,30 +235,22 @@ jobs:
           - x86_64-unknown-linux-musl
           - aarch64-unknown-linux-gnu
           - aarch64-unknown-linux-musl
-          - armv7-unknown-linux-gnueabihf
         node:
-          - '20'
-          - '22'
           - '24'
     runs-on: ${{ contains(matrix.target, 'aarch64') && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v6
-
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
-
       - uses: oven-sh/setup-bun@v2
-
       - name: Output docker params
         id: docker
         run: |
           node -e "
             if ('${{ matrix.target }}'.startsWith('aarch64')) {
               console.log('PLATFORM=linux/arm64')
-            } else if ('${{ matrix.target }}'.startsWith('armv7')) {
-              console.log('PLATFORM=linux/arm/v7')
             } else {
               console.log('PLATFORM=linux/amd64')
             }
@@ -309,40 +262,54 @@ jobs:
               console.log('IMAGE=node:${{ matrix.node }}-slim')
             }
           " >> $GITHUB_OUTPUT
-
       - name: Install dependencies
         run: |
-          bun config set supportedArchitectures.cpu '["current", "arm64", "x64", "arm"]'
-          bun config set supportedArchitectures.libc '["current", "musl", "gnu"]'
+          npm config set --json supportedArchitectures.cpu '["current", "arm64", "x64", "arm"]'
+          npm config set --json supportedArchitectures.libc '["current", "musl", "gnu"]'
           bun install
-
       - name: Download artifacts
         uses: actions/download-artifact@v7
         with:
           name: bindings-${{ matrix.target }}
-          path: watcher/
-
+          path: .
       - name: List packages
-        run: ls -R watcher/
+        run: ls -R .
         shell: bash
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-        if: ${{ contains(matrix.target, 'armv7') }}
-        with:
-          platforms: all
-
-      - run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-        if: ${{ contains(matrix.target, 'armv7') }}
-
       - name: Test bindings
         uses: addnab/docker-run-action@v3
         with:
           image: ${{ steps.docker.outputs.IMAGE }}
           options: -v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}
-          run: |
-            cd watcher
-            node -e "require('./index.js')"
+          run: bun test
+
+  test-wasi:
+    name: Test WASI target
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: yarn
+      - name: Install dependencies
+        run: |
+          yarn config set supportedArchitectures.cpu "wasm32"
+          yarn install
+      - name: Download artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: bindings-wasm32-wasip1-threads
+          path: .
+      - name: List packages
+        run: ls -R .
+        shell: bash
+      - name: Test bindings
+        run: yarn test
+        env:
+          NAPI_RS_FORCE_WASI: 1
 
   publish:
     name: Publish
@@ -353,48 +320,41 @@ jobs:
     needs:
       - lint
       - build
-      - build-freebsd
+      # - build-freebsd
       - test-macOS-windows-binding
       - test-linux-binding
+      - test-wasi
     steps:
       - uses: actions/checkout@v6
-
       - name: Setup node
         uses: actions/setup-node@v6
         with:
           node-version: 24
-
       - uses: oven-sh/setup-bun@v2
-
       - name: Install dependencies
         run: bun install
-
       - name: Create npm dirs
-        run: bun run --filter="@enk0ded/watcher" artifacts
-
+        run: bun napi create-npm-dirs
       - name: Download all artifacts
         uses: actions/download-artifact@v7
         with:
           path: artifacts
-
       - name: Move artifacts
-        run: bun run --filter="@enk0ded/watcher" artifacts
-
+        run: bun artifacts
       - name: List packages
-        run: ls -R watcher/npm
+        run: ls -R ./npm
         shell: bash
-
       - name: Publish
         run: |
           npm config set provenance true
           if git log -1 --pretty=%B | grep "^[0-9]\+\.[0-9]\+\.[0-9]\+$";
           then
             echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-            cd watcher && npm publish --access public
+            bun npm publish --access public
           elif git log -1 --pretty=%B | grep "^[0-9]\+\.[0-9]\+\.[0-9]\+";
           then
             echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" >> ~/.npmrc
-            cd watcher && npm publish --tag next --access public
+            bun npm publish --tag next --access public
           else
             echo "Not a release, skipping publish"
           fi

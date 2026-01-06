@@ -1,11 +1,24 @@
-/* eslint-disable n/no-unpublished-import */
+// @ts-expect-error - no types available
 import enk0ded from 'eslint-config-enk0ded';
 import globals from 'globals';
 
 export default [
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   ...enk0ded,
-  { ignores: ['node_modules', 'watcher'] },
+  {
+    ignores: [
+      '@OLD',
+      'node_modules',
+      'watcher',
+      './browser.js',
+      './index.d.ts',
+      './index.js',
+      './wasi-worker-browser.mjs',
+      './wasi-worker.mjs',
+      './watcher.wasi-browser.js',
+      './watcher.wasi.cjs',
+    ],
+  },
   {
     languageOptions: {
       ecmaVersion: 'latest',

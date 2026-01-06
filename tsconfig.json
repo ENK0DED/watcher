@@ -28,5 +28,5 @@
     "noPropertyAccessFromIndexSignature": false
   },
   "include": ["**/*.ts"],
-  "exclude": ["node_modules", "target", "watcher", "**/*.test.ts"]
+  "exclude": ["@OLD", "node_modules", "target", "watcher", "**/*.test.ts"]
 }

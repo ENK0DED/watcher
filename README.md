@@ -65,7 +65,7 @@ Subscribes to file system changes in a directory.
 type EventType = 'create' | 'update' | 'delete';
 
 type WatchEvent = {
-  path: string;    // Absolute path to the changed file/directory
+  path: string; // Absolute path to the changed file/directory
   type: EventType; // Type of change
 };
 ```

@@ -6,13 +6,6 @@ export declare class Subscription {
   unsubscribe(): void
 }
 
-/** Event type representing what kind of change occurred */
-export declare const enum EventType {
-  Create = 'create',
-  Update = 'update',
-  Delete = 'delete'
-}
-
 /**
  * Subscribe to file system changes in a directory
  *
@@ -28,14 +21,14 @@ export declare function subscribe(directory: string, callback: (result: WatchCal
 
 /** Callback result type for the watcher */
 export interface WatchCallbackResult {
-  error?: string
+  error?: Error
   events: Array<WatchEvent>
 }
 
 /** A file system event */
 export interface WatchEvent {
   path: string
-  type: EventType
+  type: 'create' | 'update' | 'delete'
 }
 
 /** Options for configuring the watcher */
