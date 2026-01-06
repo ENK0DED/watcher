@@ -17,7 +17,7 @@ export default [
         ...globals.es2026,
         ...globals.node,
       },
-      parserOptions: { projectService: { allowDefaultProject: true } },
+      parserOptions: { projectService: true },
       sourceType: 'module',
     },
   },
