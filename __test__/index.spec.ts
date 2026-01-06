@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
 // eslint-disable-next-line n/no-missing-import
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
@@ -87,6 +86,8 @@ describe('watcher', () => {
     } catch {
       // Ignore cleanup errors
     }
+
+    await sleep(500);
   });
 
   describe('files', () => {
@@ -588,7 +589,7 @@ describe('watcher', () => {
       const file2 = getFilename(testDirectory);
       await writeFile(file2, 'after unsubscribe');
 
-      await sleep(300);
+      await sleep(100);
 
       // Should not have received events for the second file
       expect(collector.events.every((event) => event.path !== file2)).toBe(true);

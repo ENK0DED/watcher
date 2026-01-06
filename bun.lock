@@ -4,11 +4,8 @@
   "workspaces": {
     "": {
       "devDependencies": {
-        "@emnapi/core": "^1.5.0",
-        "@emnapi/runtime": "^1.5.0",
         "@napi-rs/cli": "^3.5.1",
         "@taplo/cli": "^0.7.0",
-        "@tybys/wasm-util": "^0.10.0",
         "@types/bun": "latest",
         "eslint": "^9.39.2",
         "eslint-config-enk0ded": "^1.5.0",

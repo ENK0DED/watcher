@@ -1,6 +1,8 @@
 # @enk0ded/watcher
 
-A high-performance file system watcher for Node.js, written in Rust and exposed via N-API bindings.
+[![CI](https://github.com/ENK0DED/watcher/actions/workflows/CI.yml/badge.svg)](https://github.com/ENK0DED/watcher/actions/workflows/CI.yml)
+
+> A high-performance file system watcher for Node.js, written in Rust and exposed via N-API bindings.
 
 ## Features
 
@@ -62,11 +64,9 @@ Subscribes to file system changes in a directory.
 ### Event Types
 
 ```typescript
-type EventType = 'create' | 'update' | 'delete';
-
 type WatchEvent = {
   path: string; // Absolute path to the changed file/directory
-  type: EventType; // Type of change
+  type: 'create' | 'update' | 'delete'; // Type of change
 };
 ```
 
@@ -80,22 +80,36 @@ type WatchEvent = {
 
 ### Building
 
+After `bun run build` command, you can see a `watcher.[darwin|win32|linux].node` file in project root. This is the native addon built from [lib.rs](./src/lib.rs).
+
 ```bash
 # Install dependencies
 bun install
 
-# Build everything (Rust + TypeScript)
+# Build
 bun run build
 
-# Build in debug mode (faster compilation)
-bun run dev
+# Build in debug mode
+bun dev
 ```
 
 ### Testing
 
+This package uses Bun's built in [Test runner](https://bun.com/docs/test).
+
 ```bash
 bun test
 ```
+
+### CI
+
+With GitHub Actions, each commit and pull request will be built and tested automatically in [`node@24`] x [`macOS`, `Linux`, `Windows`] matrix.
+
+### Release
+
+The release action of this package releases multiple NPM packages for different platforms and adds them to `optionalDependencies` before releasing the main package.
+
+Your package manager will choose which native package it should install automatically. You can take a look at the [npm](./npm) directory for details.
 
 ## Performance
 
@@ -107,6 +121,20 @@ This watcher is optimized for performance:
 - Zero-copy event handling in Rust
 - Efficient thread communication via crossbeam channels
 
-## License
+## Release package
 
-MIT
+Ensure you have set your **NPM_TOKEN** in the `GitHub` project setting.
+
+In `Settings -> Secrets`, add **NPM_TOKEN** into it.
+
+When you want to release the package:
+
+```bash
+npm version [<newversion> | major | minor | patch | premajor | preminor | prepatch | prerelease [--preid=<prerelease-id>] | from-git]
+
+git push
+```
+
+GitHub actions will do the rest job for you.
+
+> WARN: Don't run `npm publish` manually.

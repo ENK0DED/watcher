@@ -10,7 +10,6 @@
     "url": "git+ssh://git@github.com/enk0ded/watcher.git"
   },
   "license": "MIT",
-  "browser": "browser.js",
   "keywords": [
     "watcher",
     "file system watcher",
@@ -19,8 +18,7 @@
   ],
   "files": [
     "index.d.ts",
-    "index.js",
-    "browser.js"
+    "index.js"
   ],
   "napi": {
     "binaryName": "watcher",
@@ -36,7 +34,7 @@
     ]
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org/",
@@ -46,6 +44,7 @@
     "artifacts": "napi artifacts",
     "build": "napi build --platform --esm --release",
     "build:debug": "napi build --platform --esm",
+    "create-npm-dirs": "napi create-npm-dirs",
     "format": "run-p format:prettier format:rs format:toml",
     "format:prettier": "prettier . -w",
     "format:toml": "taplo format",
@@ -56,8 +55,6 @@
     "version": "napi version"
   },
   "devDependencies": {
-    "@emnapi/core": "^1.5.0",
-    "@emnapi/runtime": "^1.5.0",
     "@napi-rs/cli": "^3.5.1",
     "@taplo/cli": "^0.7.0",
     "@types/bun": "latest",

@@ -1,6 +1,6 @@
 #![deny(clippy::all)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
@@ -70,6 +70,19 @@ fn build_glob_set(patterns: &[String]) -> Result<GlobSet> {
   builder.build().map_err(|e| Error::new(Status::GenericFailure, format!("Failed to build glob set: {}", e)))
 }
 
+/// Convert a path to a clean string, stripping the Windows extended-length path prefix if present
+fn path_to_clean_string(path: &Path) -> String {
+  let path_str = path.to_string_lossy();
+
+  // Strip the \\?\ prefix on Windows
+  #[cfg(windows)]
+  if let Some(stripped) = path_str.strip_prefix(r"\\?\") {
+    return stripped.to_string();
+  }
+
+  path_str.to_string()
+}
+
 /// Check if a path should be ignored
 fn should_ignore(path: &PathBuf, glob_set: &GlobSet, base_path: &PathBuf) -> bool {
   // Try matching against relative path first
@@ -130,7 +143,7 @@ pub fn subscribe(env: Env, directory: String, callback: Unknown, options: Option
     return Err(Error::new(Status::PendingException, ""));
   }
 
-  let base_path = path.canonicalize().map_err(|e| Error::new(Status::GenericFailure, format!("Failed to canonicalize path: {}", e)))?;
+  let base_path = dunce::canonicalize(&path).map_err(|e| Error::new(Status::GenericFailure, format!("Failed to canonicalize path: {}", e)))?;
 
   // Build glob set for ignore patterns
   let ignore_patterns = options.as_ref().and_then(|o| o.ignore.as_ref()).cloned().unwrap_or_default();
@@ -158,7 +171,7 @@ pub fn subscribe(env: Env, directory: String, callback: Unknown, options: Option
           if let Some(event_type) = event_kind_to_type(&event.kind) {
             for path in &event.paths {
               if !should_ignore(path, &glob_set, &base_path_clone) {
-                events.push(WatchEvent { path: path.to_string_lossy().to_string(), event_type: event_type.to_string() });
+                events.push(WatchEvent { path: path_to_clean_string(path), event_type: event_type.to_string() });
               }
             }
           }
