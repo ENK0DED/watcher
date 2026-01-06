@@ -80,7 +80,7 @@ jobs:
             build: bun run build --target aarch64-linux-android
           - host: ubuntu-latest
             target: wasm32-wasip1-threads
-            build: yarn build --target wasm32-wasip1-threads
+            build: bun run build --target wasm32-wasip1-threads
     name: stable - ${{ matrix.settings.target }} - node@24
     runs-on: ${{ matrix.settings.host }}
     steps:
@@ -293,11 +293,10 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: yarn
       - name: Install dependencies
         run: |
-          yarn config set supportedArchitectures.cpu "wasm32"
-          yarn install
+          npm config set supportedArchitectures.cpu "wasm32"
+          bun install
       - name: Download artifacts
         uses: actions/download-artifact@v7
         with:
@@ -307,7 +306,7 @@ jobs:
         run: ls -R .
         shell: bash
       - name: Test bindings
-        run: yarn test
+        run: bun test
         env:
           NAPI_RS_FORCE_WASI: 1
 
