@@ -78,9 +78,6 @@ jobs:
           - host: ubuntu-latest
             target: aarch64-linux-android
             build: bun run build --target aarch64-linux-android
-          - host: ubuntu-latest
-            target: wasm32-wasip1-threads
-            build: bun run build --target wasm32-wasip1-threads
     name: stable - ${{ matrix.settings.target }} - node@24
     runs-on: ${{ matrix.settings.host }}
     steps:
@@ -132,7 +129,6 @@ jobs:
           name: bindings-${{ matrix.settings.target }}
           path: |
             ${{ env.APP_NAME }}.*.node
-            ${{ env.APP_NAME }}.*.wasm
           if-no-files-found: error
 
   # build-freebsd:
@@ -282,34 +278,6 @@ jobs:
           options: -v ${{ github.workspace }}:${{ github.workspace }} -w ${{ github.workspace }} --platform ${{ steps.docker.outputs.PLATFORM }}
           run: bun test
 
-  test-wasi:
-    name: Test WASI target
-    needs:
-      - build
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Setup node
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-      - name: Install dependencies
-        run: |
-          npm config set supportedArchitectures.cpu "wasm32"
-          bun install
-      - name: Download artifacts
-        uses: actions/download-artifact@v7
-        with:
-          name: bindings-wasm32-wasip1-threads
-          path: .
-      - name: List packages
-        run: ls -R .
-        shell: bash
-      - name: Test bindings
-        run: bun test
-        env:
-          NAPI_RS_FORCE_WASI: 1
-
   publish:
     name: Publish
     runs-on: ubuntu-latest
@@ -322,7 +290,6 @@ jobs:
       # - build-freebsd
       - test-macOS-windows-binding
       - test-linux-binding
-      - test-wasi
     steps:
       - uses: actions/checkout@v6
       - name: Setup node

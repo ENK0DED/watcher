@@ -3,7 +3,7 @@
 /** An active subscription that can be unsubscribed */
 export declare class Subscription {
   /** Stop watching for file system changes */
-  unsubscribe(): void;
+  unsubscribe(): void
 }
 
 /**
@@ -17,22 +17,22 @@ export declare class Subscription {
  * # Returns
  * A subscription that can be used to stop watching
  */
-export declare function subscribe(directory: string, callback: (result: WatchCallbackResult) => void, options?: WatchOptions): Subscription;
+export declare function subscribe(directory: string, callback: (result: WatchCallbackResult) => void, options?: WatchOptions): Subscription
 
 /** Callback result type for the watcher */
 export interface WatchCallbackResult {
-  error?: Error;
-  events: Array<WatchEvent>;
+  error?: Error
+  events: Array<WatchEvent>
 }
 
 /** A file system event */
 export interface WatchEvent {
-  path: string;
-  type: 'create' | 'update' | 'delete';
+  path: string
+  type: 'create' | 'update' | 'delete'
 }
 
 /** Options for configuring the watcher */
 export interface WatchOptions {
   /** Patterns to ignore (file paths or glob patterns) */
-  ignore?: Array<string>;
+  ignore?: Array<string>
 }

@@ -6,18 +6,7 @@ export default [
   // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   ...enk0ded,
   {
-    ignores: [
-      '@OLD',
-      'node_modules',
-      'watcher',
-      './browser.js',
-      './index.d.ts',
-      './index.js',
-      './wasi-worker-browser.mjs',
-      './wasi-worker.mjs',
-      './watcher.wasi-browser.js',
-      './watcher.wasi.cjs',
-    ],
+    ignores: ['@OLD', 'node_modules', 'watcher', './index.d.ts', './index.js'],
   },
   {
     languageOptions: {
