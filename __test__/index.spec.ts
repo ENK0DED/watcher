@@ -146,11 +146,8 @@ describe('watcher', () => {
       // Should have events involving both paths or at least one of them
       const hasSourceEvent = hasEventWithPath(events, filePath1);
       const hasDestinationEvent = hasEventWithPath(events, filePath2);
-      // At least one of the paths should have an event
-      if (!hasSourceEvent && !hasDestinationEvent) {
-        // Force failure with useful context
-        expect(hasSourceEvent).toBe(true); // source event not found
-      }
+      // At least one of the paths should have an event - using toContain shows both values on failure
+      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
     });
 
     test('should emit when a file is deleted', async () => {
@@ -216,10 +213,8 @@ describe('watcher', () => {
       const events = await waitForEvents(collector);
       const hasSourceEvent = hasEventWithPath(events, directoryPath1);
       const hasDestinationEvent = hasEventWithPath(events, directoryPath2);
-      // At least one of the paths should have an event
-      if (!hasSourceEvent && !hasDestinationEvent) {
-        expect(hasSourceEvent).toBe(true); // source event not found
-      }
+      // At least one of the paths should have an event - using toContain shows both values on failure
+      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
     });
 
     test('should emit when a directory is deleted', async () => {
@@ -306,10 +301,8 @@ describe('watcher', () => {
       const events = await waitForEvents(collector);
       const hasSourceEvent = hasEventWithPath(events, filePath1);
       const hasDestinationEvent = hasEventWithPath(events, filePath2);
-      // At least one of the paths should have an event
-      if (!hasSourceEvent && !hasDestinationEvent) {
-        expect(hasSourceEvent).toBe(true); // source event not found
-      }
+      // At least one of the paths should have an event - using toContain shows both values on failure
+      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
     });
 
     test('should emit when a sub-file is deleted', async () => {
@@ -347,10 +340,8 @@ describe('watcher', () => {
       const events = await waitForEvents(collector);
       const hasSourceEvent = hasEventWithPath(events, filePath1);
       const hasDestinationEvent = hasEventWithPath(events, filePath2);
-      // At least one of the paths should have an event
-      if (!hasSourceEvent && !hasDestinationEvent) {
-        expect(hasSourceEvent).toBe(true); // source event not found
-      }
+      // At least one of the paths should have an event - using toContain shows both values on failure
+      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
     });
   });
 
