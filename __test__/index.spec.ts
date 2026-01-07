@@ -12,13 +12,19 @@ import { subscribe, type Subscription, type WatchEvent } from '../index.js';
 let fileCounter = 0;
 
 /** Generate a unique filename in the given directory */
-const getFilename = (baseDirectory: string, ...subDirectories: string[]): string => {
+const getFilename = (baseDirectory: string, ...subDirectories: string[]) => {
   const randomSuffix = Math.random().toString(36).slice(2);
   return path.join(baseDirectory, ...subDirectories, `test${(fileCounter++).toString()}${randomSuffix}`);
 };
 
+/** Helper to find event by path */
+const findEventByPath = (events: WatchEvent[], targetPath: string) => events.find((event) => event.path === targetPath);
+
+/** Helper to check if any event matches the path */
+const hasEventWithPath = (events: WatchEvent[], targetPath: string) => events.some((event) => event.path === targetPath);
+
 /** Helper to wait for events with timeout */
-function waitForEvents(collector: { errors: Error[]; events: WatchEvent[] }, options: { minEvents?: number; timeout?: number } = {}): Promise<WatchEvent[]> {
+const waitForEvents = (collector: { errors: Error[]; events: WatchEvent[] }, options: { minEvents?: number; timeout?: number } = {}): Promise<WatchEvent[]> => {
   const { minEvents = 1, timeout = 2000 } = options;
 
   return new Promise((resolve, reject) => {
@@ -30,18 +36,19 @@ function waitForEvents(collector: { errors: Error[]; events: WatchEvent[] }, opt
       }
     }, timeout);
 
-    const checkInterval = setInterval(() => {
+    const checkInterval = setInterval(async () => {
       if (collector.events.length >= minEvents) {
         clearTimeout(timeoutId);
         clearInterval(checkInterval);
+
         // Give a small delay for any additional events to arrive
-        setTimeout(() => {
-          resolve(collector.events);
-        }, 50);
+        await sleep(50);
+
+        resolve(collector.events);
       }
     }, 50);
   });
-}
+};
 
 describe('watcher', () => {
   let testDirectory: string;
@@ -99,7 +106,9 @@ describe('watcher', () => {
       await writeFile(filePath, 'hello world');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'create' && event.path === filePath)).toBe(true);
+      const event = findEventByPath(events, filePath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('create');
     });
 
     test('should emit when a file is updated', async () => {
@@ -113,7 +122,9 @@ describe('watcher', () => {
       await writeFile(filePath, 'updated content');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'update' && event.path === filePath)).toBe(true);
+      const event = findEventByPath(events, filePath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('update');
     });
 
     test('should emit when a file is renamed', async () => {
@@ -129,10 +140,13 @@ describe('watcher', () => {
 
       // Renames can be reported as delete+create, or as update events depending on the platform
       const events = await waitForEvents(collector);
-      // Should have events involving both paths or at least the destination
-      const hasSourceEvent = events.some((event) => event.path === filePath1);
-      const hasDestinationEvent = events.some((event) => event.path === filePath2);
-      expect(hasSourceEvent || hasDestinationEvent).toBe(true);
+
+      // Should have events involving both paths or at least one of them
+      const hasSourceEvent = hasEventWithPath(events, filePath1);
+      const hasDestinationEvent = hasEventWithPath(events, filePath2);
+
+      // At least one of the paths should have an event - using toContain shows both values on failure
+      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
     });
 
     test('should emit when a file is deleted', async () => {
@@ -146,7 +160,9 @@ describe('watcher', () => {
       await unlink(filePath);
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'delete' && event.path === filePath)).toBe(true);
+      const event = findEventByPath(events, filePath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('delete');
     });
 
     test('should emit when multiple files are created rapidly', async () => {
@@ -160,7 +176,9 @@ describe('watcher', () => {
 
       const events = await waitForEvents(collector, { minEvents: 5 });
       for (const filePath of files) {
-        expect(events.some((event) => event.type === 'create' && event.path === filePath)).toBe(true);
+        const event = findEventByPath(events, filePath);
+        expect(event).toBeDefined();
+        expect(event?.type).toBe('create');
       }
     });
   });
@@ -174,7 +192,9 @@ describe('watcher', () => {
       await mkdir(directoryPath);
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'create' && event.path === directoryPath)).toBe(true);
+      const event = findEventByPath(events, directoryPath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('create');
     });
 
     test('should emit when a directory is renamed', async () => {
@@ -190,9 +210,10 @@ describe('watcher', () => {
 
       // Renames can be reported as delete+create, or as update events depending on the platform
       const events = await waitForEvents(collector);
-      const hasSourceEvent = events.some((event) => event.path === directoryPath1);
-      const hasDestinationEvent = events.some((event) => event.path === directoryPath2);
-      expect(hasSourceEvent || hasDestinationEvent).toBe(true);
+      const hasSourceEvent = hasEventWithPath(events, directoryPath1);
+      const hasDestinationEvent = hasEventWithPath(events, directoryPath2);
+      // At least one of the paths should have an event - using toContain shows both values on failure
+      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
     });
 
     test('should emit when a directory is deleted', async () => {
@@ -206,7 +227,9 @@ describe('watcher', () => {
       await rm(directoryPath, { recursive: true });
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'delete' && event.path === directoryPath)).toBe(true);
+      const event = findEventByPath(events, directoryPath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('delete');
     });
 
     test('should emit when nested directories are created', async () => {
@@ -217,7 +240,10 @@ describe('watcher', () => {
       await mkdir(nestedPath, { recursive: true });
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'create' && event.path.includes('level1'))).toBe(true);
+      const level1Events = events.filter((event) => event.path.includes('level1'));
+      expect(level1Events.length).toBeGreaterThan(0);
+      const createEvents = level1Events.filter((event) => event.type === 'create');
+      expect(createEvents.length).toBeGreaterThan(0);
     });
   });
 
@@ -234,7 +260,9 @@ describe('watcher', () => {
       await writeFile(filePath, 'hello world');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'create' && event.path === filePath)).toBe(true);
+      const event = findEventByPath(events, filePath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('create');
     });
 
     test('should emit when a sub-file is updated', async () => {
@@ -250,7 +278,9 @@ describe('watcher', () => {
       await writeFile(filePath, 'updated content');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'update' && event.path === filePath)).toBe(true);
+      const event = findEventByPath(events, filePath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('update');
     });
 
     test('should emit when a sub-file is renamed', async () => {
@@ -268,9 +298,10 @@ describe('watcher', () => {
 
       // Renames can be reported as delete+create, or as update events depending on the platform
       const events = await waitForEvents(collector);
-      const hasSourceEvent = events.some((event) => event.path === filePath1);
-      const hasDestinationEvent = events.some((event) => event.path === filePath2);
-      expect(hasSourceEvent || hasDestinationEvent).toBe(true);
+      const hasSourceEvent = hasEventWithPath(events, filePath1);
+      const hasDestinationEvent = hasEventWithPath(events, filePath2);
+      // At least one of the paths should have an event - using toContain shows both values on failure
+      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
     });
 
     test('should emit when a sub-file is deleted', async () => {
@@ -286,7 +317,9 @@ describe('watcher', () => {
       await unlink(filePath);
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'delete' && event.path === filePath)).toBe(true);
+      const event = findEventByPath(events, filePath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('delete');
     });
 
     test('should emit when a file is moved to a sub-directory', async () => {
@@ -304,9 +337,10 @@ describe('watcher', () => {
 
       // Moving files across directories generates events for both paths
       const events = await waitForEvents(collector);
-      const hasSourceEvent = events.some((event) => event.path === filePath1);
-      const hasDestinationEvent = events.some((event) => event.path === filePath2);
-      expect(hasSourceEvent || hasDestinationEvent).toBe(true);
+      const hasSourceEvent = hasEventWithPath(events, filePath1);
+      const hasDestinationEvent = hasEventWithPath(events, filePath2);
+      // At least one of the paths should have an event - using toContain shows both values on failure
+      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
     });
   });
 
@@ -323,7 +357,9 @@ describe('watcher', () => {
       await mkdir(subDirectory);
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'create' && event.path === subDirectory)).toBe(true);
+      const event = findEventByPath(events, subDirectory);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('create');
     });
 
     test('should emit when a sub-directory is deleted', async () => {
@@ -339,7 +375,9 @@ describe('watcher', () => {
       await rm(subDirectory, { recursive: true });
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'delete' && event.path === subDirectory)).toBe(true);
+      const event = findEventByPath(events, subDirectory);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('delete');
     });
 
     test('should emit when a deeply nested file is created', async () => {
@@ -354,7 +392,9 @@ describe('watcher', () => {
       await writeFile(filePath, 'deep content');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'create' && event.path === filePath)).toBe(true);
+      const event = findEventByPath(events, filePath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('create');
     });
   });
 
@@ -371,7 +411,9 @@ describe('watcher', () => {
       try {
         await symlink(targetPath, linkPath);
         const events = await waitForEvents(collector);
-        expect(events.some((event) => event.type === 'create' && event.path === linkPath)).toBe(true);
+        const event = findEventByPath(events, linkPath);
+        expect(event).toBeDefined();
+        expect(event?.type).toBe('create');
       } catch {
         // Symlinks might not be supported on all platforms/configurations
         console.log('Symlink test skipped (not supported on this platform)');
@@ -397,7 +439,9 @@ describe('watcher', () => {
       await unlink(linkPath);
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'delete' && event.path === linkPath)).toBe(true);
+      const event = findEventByPath(events, linkPath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('delete');
     });
   });
 
@@ -413,13 +457,16 @@ describe('watcher', () => {
       await sleep(100);
 
       await writeFile(normalFile, 'normal content');
-      await writeFile(path.join(ignoredDirectory, 'ignored.txt'), 'ignored content');
+      const ignoredFile = path.join(ignoredDirectory, 'ignored.txt');
+      await writeFile(ignoredFile, 'ignored content');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.path === normalFile)).toBe(true);
-      // Check that ignored directory contents are not in events
-      const ignoredEvents = events.filter((event) => event.path.includes(ignoredDirectoryName) && event.path.includes('ignored.txt'));
-      expect(ignoredEvents.length).toBe(0);
+      // Normal file should have an event
+      const normalEvent = findEventByPath(events, normalFile);
+      expect(normalEvent).toBeDefined();
+      // Ignored file should NOT have an event
+      const ignoredEvent = findEventByPath(events, ignoredFile);
+      expect(ignoredEvent).toBeUndefined();
     });
 
     test('should ignore a file by path', async () => {
@@ -433,8 +480,12 @@ describe('watcher', () => {
       await writeFile(ignoredFile, 'ignored content');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.path === normalFile)).toBe(true);
-      expect(events.every((event) => event.path !== ignoredFile)).toBe(true);
+      // Normal file should have an event
+      const normalEvent = findEventByPath(events, normalFile);
+      expect(normalEvent).toBeDefined();
+      // Ignored file should NOT have an event
+      const ignoredEvent = findEventByPath(events, ignoredFile);
+      expect(ignoredEvent).toBeUndefined();
     });
 
     test('should ignore files matching glob patterns', async () => {
@@ -450,9 +501,15 @@ describe('watcher', () => {
       await writeFile(normalFile, 'normal content');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.path === normalFile)).toBe(true);
-      expect(events.every((event) => !event.path.endsWith('.log'))).toBe(true);
-      expect(events.every((event) => !event.path.endsWith('.tmp'))).toBe(true);
+      // Normal file should have an event
+      const normalEvent = findEventByPath(events, normalFile);
+      expect(normalEvent).toBeDefined();
+      // Log file should NOT have an event
+      const logEvent = findEventByPath(events, logFile);
+      expect(logEvent).toBeUndefined();
+      // Temp file should NOT have an event
+      const temporaryEvent = findEventByPath(events, temporaryFile);
+      expect(temporaryEvent).toBeUndefined();
     });
 
     test('should ignore directories matching glob patterns', async () => {
@@ -462,13 +519,18 @@ describe('watcher', () => {
       subscribeWithCollector(testDirectory, { ignore: ['node_modules/**'] });
       await sleep(100);
 
-      await writeFile(path.join(ignoreDirectory, 'package.json'), '{}');
+      const ignoredFile = path.join(ignoreDirectory, 'package.json');
+      await writeFile(ignoredFile, '{}');
       const normalFile = path.join(testDirectory, 'index.js');
       await writeFile(normalFile, 'code');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.path === normalFile)).toBe(true);
-      expect(events.every((event) => !event.path.includes('node_modules'))).toBe(true);
+      // Normal file should have an event
+      const normalEvent = findEventByPath(events, normalFile);
+      expect(normalEvent).toBeDefined();
+      // node_modules file should NOT have an event
+      const ignoredEvent = findEventByPath(events, ignoredFile);
+      expect(ignoredEvent).toBeUndefined();
     });
 
     test('should support multiple ignore patterns', async () => {
@@ -480,17 +542,28 @@ describe('watcher', () => {
       subscribeWithCollector(testDirectory, { ignore: ['build/**', '.cache/**', '*.bak'] });
       await sleep(100);
 
-      await writeFile(path.join(buildDirectory, 'output.js'), 'built code');
-      await writeFile(path.join(cacheDirectory, 'cache.json'), '{}');
-      await writeFile(path.join(testDirectory, 'backup.bak'), 'backup');
+      const buildFile = path.join(buildDirectory, 'output.js');
+      const cacheFile = path.join(cacheDirectory, 'cache.json');
+      const backupFile = path.join(testDirectory, 'backup.bak');
+      await writeFile(buildFile, 'built code');
+      await writeFile(cacheFile, '{}');
+      await writeFile(backupFile, 'backup');
       const normalFile = path.join(testDirectory, 'source.ts');
       await writeFile(normalFile, 'source code');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.path === normalFile)).toBe(true);
-      expect(events.every((event) => !event.path.includes('build'))).toBe(true);
-      expect(events.every((event) => !event.path.includes('.cache'))).toBe(true);
-      expect(events.every((event) => !event.path.endsWith('.bak'))).toBe(true);
+      // Normal file should have an event
+      const normalEvent = findEventByPath(events, normalFile);
+      expect(normalEvent).toBeDefined();
+      // Build file should NOT have an event
+      const buildEvent = findEventByPath(events, buildFile);
+      expect(buildEvent).toBeUndefined();
+      // Cache file should NOT have an event
+      const cacheEvent = findEventByPath(events, cacheFile);
+      expect(cacheEvent).toBeUndefined();
+      // Backup file should NOT have an event
+      const backupEvent = findEventByPath(events, backupFile);
+      expect(backupEvent).toBeUndefined();
     });
   });
 
@@ -517,8 +590,10 @@ describe('watcher', () => {
         await waitForEvents(collector1);
         await waitForEvents(collector2);
 
-        expect(collector1.events.some((event) => event.path === filePath)).toBe(true);
-        expect(collector2.events.some((event) => event.path === filePath)).toBe(true);
+        // Collector 1 should have event for the file
+        expect(findEventByPath(collector1.events, filePath)).toBeDefined();
+        // Collector 2 should also have event for the file
+        expect(findEventByPath(collector2.events, filePath)).toBeDefined();
       } finally {
         sub1.unsubscribe();
         sub2.unsubscribe();
@@ -554,10 +629,14 @@ describe('watcher', () => {
         await waitForEvents(collector1);
         await waitForEvents(collector2);
 
-        expect(collector1.events.some((event) => event.path === file1)).toBe(true);
-        expect(collector1.events.every((event) => event.path !== file2)).toBe(true);
-        expect(collector2.events.some((event) => event.path === file2)).toBe(true);
-        expect(collector2.events.every((event) => event.path !== file1)).toBe(true);
+        // Collector 1 should have event for file1
+        expect(findEventByPath(collector1.events, file1)).toBeDefined();
+        // Collector 1 should NOT have event for file2
+        expect(findEventByPath(collector1.events, file2)).toBeUndefined();
+        // Collector 2 should have event for file2
+        expect(findEventByPath(collector2.events, file2)).toBeDefined();
+        // Collector 2 should NOT have event for file1
+        expect(findEventByPath(collector2.events, file1)).toBeUndefined();
       } finally {
         sub1.unsubscribe();
         sub2.unsubscribe();
@@ -576,7 +655,8 @@ describe('watcher', () => {
       await writeFile(file1, 'before unsubscribe');
 
       await waitForEvents(collector);
-      expect(collector.events.some((event) => event.path === file1)).toBe(true);
+      // File 1 should have an event
+      expect(findEventByPath(collector.events, file1)).toBeDefined();
 
       // Unsubscribe
       if (subscription) {
@@ -592,7 +672,7 @@ describe('watcher', () => {
       await sleep(100);
 
       // Should not have received events for the second file
-      expect(collector.events.every((event) => event.path !== file2)).toBe(true);
+      expect(findEventByPath(collector.events, file2)).toBeUndefined();
     });
 
     test('should allow re-subscribing after unsubscribe', async () => {
@@ -614,7 +694,7 @@ describe('watcher', () => {
       await writeFile(filePath, 'new content');
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.path === filePath)).toBe(true);
+      expect(findEventByPath(events, filePath)).toBeDefined();
     });
   });
 
@@ -638,10 +718,8 @@ describe('watcher', () => {
     });
 
     test('should error if the watched directory does not exist', () => {
-      const nonExistentDirectory = path.join(testDirectory, 'does-not-exist-' + Date.now().toString());
-
       expect(() =>
-        subscribe(nonExistentDirectory, () => {
+        subscribe(path.join(testDirectory, 'does-not-exist-' + Date.now().toString()), () => {
           /* empty */
         }),
       ).toThrow();
@@ -673,7 +751,7 @@ describe('watcher', () => {
 
       const events = await waitForEvents(collector, { minEvents: 10, timeout: 5000 });
       for (const filePath of files) {
-        expect(events.some((event) => event.path === filePath)).toBe(true);
+        expect(findEventByPath(events, filePath)).toBeDefined();
       }
     });
 
@@ -691,7 +769,9 @@ describe('watcher', () => {
       }
 
       const events = await waitForEvents(collector);
-      expect(events.some((event) => event.type === 'update' && event.path === filePath)).toBe(true);
+      const event = findEventByPath(events, filePath);
+      expect(event).toBeDefined();
+      expect(event?.type).toBe('update');
     });
 
     test('should handle create and immediate delete', async () => {
@@ -708,9 +788,10 @@ describe('watcher', () => {
        * This test just verifies no crash occurs.
        */
       await sleep(300);
-      // If we got events, they should be valid
-      if (collector.events.length > 0) {
-        expect(collector.events.every((event) => ['create', 'delete', 'update'].includes(event.type))).toBe(true);
+
+      // If we got events, they should be valid event types
+      for (const event of collector.events) {
+        expect(['create', 'delete', 'update']).toContain(event.type);
       }
     });
   });
