@@ -1,8 +1,0 @@
-.cargo
-.github
-npm
-target
-Cargo.lock
-eslint.config.ts
-prettier.config.js
-*.node

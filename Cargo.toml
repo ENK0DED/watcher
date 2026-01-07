@@ -1,15 +1,30 @@
-[workspace]
-members = ["watcher"]
-resolver = "2"
+[package]
+edition      = "2024"
+license      = "MIT"
+name         = "watcher"
+rust-version = "1.92.0"
+version      = "0.1.0"
 
-[workspace.dependencies]
-napi = { version = "3", default-features = false, features = ["async", "napi10"] }
-napi-build = "2"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+dunce = "1"
+globset = "0.4"
+napi = { version = "3", default-features = false, features = [
+  "async",
+  "napi10",
+] }
 napi-derive = "3"
 notify = { version = "8", default-features = false, features = ["serde"] }
 notify-debouncer-full = "0.6"
-globset = "0.4"
+
+[build-dependencies]
+napi-build = "2"
 
 [profile.release]
+codegen-units = 1
 lto = true
 strip = "symbols"
