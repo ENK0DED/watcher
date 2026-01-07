@@ -12,23 +12,19 @@ import { subscribe, type Subscription, type WatchEvent } from '../index.js';
 let fileCounter = 0;
 
 /** Generate a unique filename in the given directory */
-const getFilename = (baseDirectory: string, ...subDirectories: string[]): string => {
+const getFilename = (baseDirectory: string, ...subDirectories: string[]) => {
   const randomSuffix = Math.random().toString(36).slice(2);
   return path.join(baseDirectory, ...subDirectories, `test${(fileCounter++).toString()}${randomSuffix}`);
 };
 
 /** Helper to find event by path */
-function findEventByPath(events: WatchEvent[], targetPath: string): undefined | WatchEvent {
-  return events.find((event) => event.path === targetPath);
-}
+const findEventByPath = (events: WatchEvent[], targetPath: string) => events.find((event) => event.path === targetPath);
 
 /** Helper to check if any event matches the path */
-function hasEventWithPath(events: WatchEvent[], targetPath: string): boolean {
-  return events.some((event) => event.path === targetPath);
-}
+const hasEventWithPath = (events: WatchEvent[], targetPath: string) => events.some((event) => event.path === targetPath);
 
 /** Helper to wait for events with timeout */
-function waitForEvents(collector: { errors: Error[]; events: WatchEvent[] }, options: { minEvents?: number; timeout?: number } = {}): Promise<WatchEvent[]> {
+const waitForEvents = (collector: { errors: Error[]; events: WatchEvent[] }, options: { minEvents?: number; timeout?: number } = {}): Promise<WatchEvent[]> => {
   const { minEvents = 1, timeout = 2000 } = options;
 
   return new Promise((resolve, reject) => {
@@ -40,18 +36,19 @@ function waitForEvents(collector: { errors: Error[]; events: WatchEvent[] }, opt
       }
     }, timeout);
 
-    const checkInterval = setInterval(() => {
+    const checkInterval = setInterval(async () => {
       if (collector.events.length >= minEvents) {
         clearTimeout(timeoutId);
         clearInterval(checkInterval);
+
         // Give a small delay for any additional events to arrive
-        setTimeout(() => {
-          resolve(collector.events);
-        }, 50);
+        await sleep(50);
+
+        resolve(collector.events);
       }
     }, 50);
   });
-}
+};
 
 describe('watcher', () => {
   let testDirectory: string;
@@ -143,9 +140,11 @@ describe('watcher', () => {
 
       // Renames can be reported as delete+create, or as update events depending on the platform
       const events = await waitForEvents(collector);
+
       // Should have events involving both paths or at least one of them
       const hasSourceEvent = hasEventWithPath(events, filePath1);
       const hasDestinationEvent = hasEventWithPath(events, filePath2);
+
       // At least one of the paths should have an event - using toContain shows both values on failure
       expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
     });
@@ -592,11 +591,9 @@ describe('watcher', () => {
         await waitForEvents(collector2);
 
         // Collector 1 should have event for the file
-        const event1 = findEventByPath(collector1.events, filePath);
-        expect(event1).toBeDefined();
+        expect(findEventByPath(collector1.events, filePath)).toBeDefined();
         // Collector 2 should also have event for the file
-        const event2 = findEventByPath(collector2.events, filePath);
-        expect(event2).toBeDefined();
+        expect(findEventByPath(collector2.events, filePath)).toBeDefined();
       } finally {
         sub1.unsubscribe();
         sub2.unsubscribe();
@@ -633,17 +630,13 @@ describe('watcher', () => {
         await waitForEvents(collector2);
 
         // Collector 1 should have event for file1
-        const collector1File1Event = findEventByPath(collector1.events, file1);
-        expect(collector1File1Event).toBeDefined();
+        expect(findEventByPath(collector1.events, file1)).toBeDefined();
         // Collector 1 should NOT have event for file2
-        const collector1File2Event = findEventByPath(collector1.events, file2);
-        expect(collector1File2Event).toBeUndefined();
+        expect(findEventByPath(collector1.events, file2)).toBeUndefined();
         // Collector 2 should have event for file2
-        const collector2File2Event = findEventByPath(collector2.events, file2);
-        expect(collector2File2Event).toBeDefined();
+        expect(findEventByPath(collector2.events, file2)).toBeDefined();
         // Collector 2 should NOT have event for file1
-        const collector2File1Event = findEventByPath(collector2.events, file1);
-        expect(collector2File1Event).toBeUndefined();
+        expect(findEventByPath(collector2.events, file1)).toBeUndefined();
       } finally {
         sub1.unsubscribe();
         sub2.unsubscribe();
@@ -663,8 +656,7 @@ describe('watcher', () => {
 
       await waitForEvents(collector);
       // File 1 should have an event
-      const file1Event = findEventByPath(collector.events, file1);
-      expect(file1Event).toBeDefined();
+      expect(findEventByPath(collector.events, file1)).toBeDefined();
 
       // Unsubscribe
       if (subscription) {
@@ -680,8 +672,7 @@ describe('watcher', () => {
       await sleep(100);
 
       // Should not have received events for the second file
-      const file2Event = findEventByPath(collector.events, file2);
-      expect(file2Event).toBeUndefined();
+      expect(findEventByPath(collector.events, file2)).toBeUndefined();
     });
 
     test('should allow re-subscribing after unsubscribe', async () => {
@@ -703,8 +694,7 @@ describe('watcher', () => {
       await writeFile(filePath, 'new content');
 
       const events = await waitForEvents(collector);
-      const event = findEventByPath(events, filePath);
-      expect(event).toBeDefined();
+      expect(findEventByPath(events, filePath)).toBeDefined();
     });
   });
 
@@ -728,10 +718,8 @@ describe('watcher', () => {
     });
 
     test('should error if the watched directory does not exist', () => {
-      const nonExistentDirectory = path.join(testDirectory, 'does-not-exist-' + Date.now().toString());
-
       expect(() =>
-        subscribe(nonExistentDirectory, () => {
+        subscribe(path.join(testDirectory, 'does-not-exist-' + Date.now().toString()), () => {
           /* empty */
         }),
       ).toThrow();
@@ -763,8 +751,7 @@ describe('watcher', () => {
 
       const events = await waitForEvents(collector, { minEvents: 10, timeout: 5000 });
       for (const filePath of files) {
-        const event = findEventByPath(events, filePath);
-        expect(event).toBeDefined();
+        expect(findEventByPath(events, filePath)).toBeDefined();
       }
     });
 
@@ -801,10 +788,10 @@ describe('watcher', () => {
        * This test just verifies no crash occurs.
        */
       await sleep(300);
+
       // If we got events, they should be valid event types
-      const validEventTypes = ['create', 'delete', 'update'];
       for (const event of collector.events) {
-        expect(validEventTypes).toContain(event.type);
+        expect(['create', 'delete', 'update']).toContain(event.type);
       }
     });
   });
