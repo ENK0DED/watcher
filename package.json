@@ -1,6 +1,6 @@
 {
   "name": "@enk0ded/watcher",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A high-performance file system watcher for Node.js, written in Rust and exposed via N-API bindings",
   "type": "module",
   "main": "index.js",
