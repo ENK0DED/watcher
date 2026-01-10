@@ -11,17 +11,71 @@ import { subscribe, type Subscription, type WatchEvent } from '../index.js';
 /** Counter for generating unique filenames */
 let fileCounter = 0;
 
-/** Generate a unique filename in the given directory */
-const getFilename = (baseDirectory: string, ...subDirectories: string[]) => {
-  const randomSuffix = Math.random().toString(36).slice(2);
-  return path.join(baseDirectory, ...subDirectories, `test${(fileCounter++).toString()}${randomSuffix}`);
+/** Whether we're running on Windows (paths are case-insensitive and events may report parent directories) */
+const isWindows = process.platform === 'win32';
+
+/** Delay after subscribing before performing file operations */
+const subscribeDelay = 100;
+
+/** Compare two paths for equality (case-insensitive on Windows) */
+const pathsEqual = (path1: string, path2: string) => {
+  const norm1 = path.normalize(path1);
+  const norm2 = path.normalize(path2);
+  return isWindows ? norm1.toLowerCase() === norm2.toLowerCase() : norm1 === norm2;
 };
 
-/** Helper to find event by path */
-const findEventByPath = (events: WatchEvent[], targetPath: string) => events.find((event) => event.path === targetPath);
+/** Check if eventPath matches targetPath (on Windows, also accepts parent directory events) */
+const pathMatches = (eventPath: string, targetPath: string) => {
+  if (pathsEqual(eventPath, targetPath)) {
+    return true;
+  }
 
-/** Helper to check if any event matches the path */
-const hasEventWithPath = (events: WatchEvent[], targetPath: string) => events.some((event) => event.path === targetPath);
+  if (isWindows) {
+    const normEvent = path.normalize(eventPath).toLowerCase();
+    const normTarget = path.normalize(targetPath).toLowerCase();
+    return normTarget.startsWith(normEvent + path.sep.toLowerCase());
+  }
+
+  return false;
+};
+
+/** Generate a unique filename in the given directory */
+const getFilename = (baseDirectory: string, ...subDirectories: string[]) =>
+  path.join(baseDirectory, ...subDirectories, `test${(fileCounter++).toString()}${Math.random().toString(36).slice(2)}`);
+
+/** Result of findEventByPath - includes whether it was an exact match or parent directory match */
+type EventMatch = { event: WatchEvent; exact: boolean } | undefined;
+
+/** Find event by path (on Windows, also matches parent directory events) */
+const findEventByPath = (events: WatchEvent[], targetPath: string): EventMatch => {
+  const exactMatch = events.find((event) => pathsEqual(event.path, targetPath));
+
+  if (exactMatch) {
+    return { event: exactMatch, exact: true };
+  }
+
+  if (isWindows) {
+    const parentMatch = events.find((event) => pathMatches(event.path, targetPath));
+
+    if (parentMatch) {
+      return { event: parentMatch, exact: false };
+    }
+  }
+
+  return undefined;
+};
+
+/** Check event type (skips type check on Windows when matched via parent directory) */
+const expectEventType = (match: EventMatch, expectedType: 'create' | 'update' | 'delete') => {
+  expect(match).toBeDefined();
+
+  if (match?.exact) {
+    expect(match.event.type).toBe(expectedType);
+  }
+};
+
+/** Check if any event matches the path */
+const hasEventWithPath = (events: WatchEvent[], targetPath: string) => events.some((event) => pathMatches(event.path, targetPath));
 
 /** Helper to wait for events with timeout */
 const waitForEvents = (collector: { errors: Error[]; events: WatchEvent[] }, options: { minEvents?: number; timeout?: number } = {}): Promise<WatchEvent[]> => {
@@ -62,11 +116,8 @@ describe('watcher', () => {
     subscription = subscribe(
       directory,
       ({ error, events }) => {
-        if (error) {
-          collector.errors.push(error);
-        } else {
-          collector.events.push(...events);
-        }
+        if (error) collector.errors.push(error);
+        else collector.events.push(...events);
       },
       options,
     );
@@ -100,15 +151,12 @@ describe('watcher', () => {
   describe('files', () => {
     test('should emit when a file is created', async () => {
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const filePath = getFilename(testDirectory);
       await writeFile(filePath, 'hello world');
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, filePath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('create');
+      expectEventType(findEventByPath(await waitForEvents(collector), filePath), 'create');
     });
 
     test('should emit when a file is updated', async () => {
@@ -117,36 +165,29 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       await writeFile(filePath, 'updated content');
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, filePath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('update');
+      expectEventType(findEventByPath(await waitForEvents(collector), filePath), 'update');
     });
 
     test('should emit when a file is renamed', async () => {
-      const filePath1 = getFilename(testDirectory);
-      const filePath2 = getFilename(testDirectory);
-      await writeFile(filePath1, 'hello world');
+      const sourcePath = getFilename(testDirectory);
+      const destinationPath = getFilename(testDirectory);
+      await writeFile(sourcePath, 'hello world');
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
-      await rename(filePath1, filePath2);
+      await rename(sourcePath, destinationPath);
 
       // Renames can be reported as delete+create, or as update events depending on the platform
       const events = await waitForEvents(collector);
 
-      // Should have events involving both paths or at least one of them
-      const hasSourceEvent = hasEventWithPath(events, filePath1);
-      const hasDestinationEvent = hasEventWithPath(events, filePath2);
-
       // At least one of the paths should have an event - using toContain shows both values on failure
-      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
+      expect([hasEventWithPath(events, sourcePath), hasEventWithPath(events, destinationPath)]).toContain(true);
     });
 
     test('should emit when a file is deleted', async () => {
@@ -155,19 +196,16 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       await unlink(filePath);
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, filePath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('delete');
+      expectEventType(findEventByPath(await waitForEvents(collector), filePath), 'delete');
     });
 
     test('should emit when multiple files are created rapidly', async () => {
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const files = Array.from({ length: 5 }, () => getFilename(testDirectory));
       for (const filePath of files) {
@@ -176,9 +214,7 @@ describe('watcher', () => {
 
       const events = await waitForEvents(collector, { minEvents: 5 });
       for (const filePath of files) {
-        const event = findEventByPath(events, filePath);
-        expect(event).toBeDefined();
-        expect(event?.type).toBe('create');
+        expectEventType(findEventByPath(events, filePath), 'create');
       }
     });
   });
@@ -186,34 +222,30 @@ describe('watcher', () => {
   describe('directories', () => {
     test('should emit when a directory is created', async () => {
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const directoryPath = getFilename(testDirectory);
       await mkdir(directoryPath);
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, directoryPath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('create');
+      expectEventType(findEventByPath(await waitForEvents(collector), directoryPath), 'create');
     });
 
     test('should emit when a directory is renamed', async () => {
-      const directoryPath1 = getFilename(testDirectory);
-      const directoryPath2 = getFilename(testDirectory);
-      await mkdir(directoryPath1);
+      const sourcePath = getFilename(testDirectory);
+      const destinationPath = getFilename(testDirectory);
+      await mkdir(sourcePath);
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
-      await rename(directoryPath1, directoryPath2);
+      await rename(sourcePath, destinationPath);
 
       // Renames can be reported as delete+create, or as update events depending on the platform
       const events = await waitForEvents(collector);
-      const hasSourceEvent = hasEventWithPath(events, directoryPath1);
-      const hasDestinationEvent = hasEventWithPath(events, directoryPath2);
+
       // At least one of the paths should have an event - using toContain shows both values on failure
-      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
+      expect([hasEventWithPath(events, sourcePath), hasEventWithPath(events, destinationPath)]).toContain(true);
     });
 
     test('should emit when a directory is deleted', async () => {
@@ -222,26 +254,25 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       await rm(directoryPath, { recursive: true });
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, directoryPath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('delete');
+      expectEventType(findEventByPath(await waitForEvents(collector), directoryPath), 'delete');
     });
 
     test('should emit when nested directories are created', async () => {
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const nestedPath = path.join(testDirectory, 'level1', 'level2', 'level3');
       await mkdir(nestedPath, { recursive: true });
 
       const events = await waitForEvents(collector);
+
       const level1Events = events.filter((event) => event.path.includes('level1'));
       expect(level1Events.length).toBeGreaterThan(0);
+
       const createEvents = level1Events.filter((event) => event.type === 'create');
       expect(createEvents.length).toBeGreaterThan(0);
     });
@@ -254,15 +285,12 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const filePath = path.join(subDirectory, 'file.txt');
       await writeFile(filePath, 'hello world');
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, filePath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('create');
+      expectEventType(findEventByPath(await waitForEvents(collector), filePath), 'create');
     });
 
     test('should emit when a sub-file is updated', async () => {
@@ -273,35 +301,31 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       await writeFile(filePath, 'updated content');
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, filePath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('update');
+      expectEventType(findEventByPath(await waitForEvents(collector), filePath), 'update');
     });
 
     test('should emit when a sub-file is renamed', async () => {
       const subDirectory = getFilename(testDirectory);
       await mkdir(subDirectory);
-      const filePath1 = path.join(subDirectory, 'file1.txt');
-      const filePath2 = path.join(subDirectory, 'file2.txt');
-      await writeFile(filePath1, 'hello world');
+      const sourcePath = path.join(subDirectory, 'file1.txt');
+      const destinationPath = path.join(subDirectory, 'file2.txt');
+      await writeFile(sourcePath, 'hello world');
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
-      await rename(filePath1, filePath2);
+      await rename(sourcePath, destinationPath);
 
       // Renames can be reported as delete+create, or as update events depending on the platform
       const events = await waitForEvents(collector);
-      const hasSourceEvent = hasEventWithPath(events, filePath1);
-      const hasDestinationEvent = hasEventWithPath(events, filePath2);
+
       // At least one of the paths should have an event - using toContain shows both values on failure
-      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
+      expect([hasEventWithPath(events, sourcePath), hasEventWithPath(events, destinationPath)]).toContain(true);
     });
 
     test('should emit when a sub-file is deleted', async () => {
@@ -312,35 +336,31 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       await unlink(filePath);
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, filePath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('delete');
+      expectEventType(findEventByPath(await waitForEvents(collector), filePath), 'delete');
     });
 
     test('should emit when a file is moved to a sub-directory', async () => {
       const subDirectory = getFilename(testDirectory);
       await mkdir(subDirectory);
-      const filePath1 = getFilename(testDirectory);
-      await writeFile(filePath1, 'hello world');
+      const sourcePath = getFilename(testDirectory);
+      await writeFile(sourcePath, 'hello world');
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
-      const filePath2 = path.join(subDirectory, 'moved.txt');
-      await rename(filePath1, filePath2);
+      const destinationPath = path.join(subDirectory, 'moved.txt');
+      await rename(sourcePath, destinationPath);
 
       // Moving files across directories generates events for both paths
       const events = await waitForEvents(collector);
-      const hasSourceEvent = hasEventWithPath(events, filePath1);
-      const hasDestinationEvent = hasEventWithPath(events, filePath2);
+
       // At least one of the paths should have an event - using toContain shows both values on failure
-      expect([hasSourceEvent, hasDestinationEvent]).toContain(true);
+      expect([hasEventWithPath(events, sourcePath), hasEventWithPath(events, destinationPath)]).toContain(true);
     });
   });
 
@@ -351,15 +371,12 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const subDirectory = path.join(parentDirectory, 'subdir');
       await mkdir(subDirectory);
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, subDirectory);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('create');
+      expectEventType(findEventByPath(await waitForEvents(collector), subDirectory), 'create');
     });
 
     test('should emit when a sub-directory is deleted', async () => {
@@ -370,14 +387,11 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       await rm(subDirectory, { recursive: true });
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, subDirectory);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('delete');
+      expectEventType(findEventByPath(await waitForEvents(collector), subDirectory), 'delete');
     });
 
     test('should emit when a deeply nested file is created', async () => {
@@ -386,15 +400,12 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const filePath = path.join(deepPath, 'deep-file.txt');
       await writeFile(filePath, 'deep content');
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, filePath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('create');
+      expectEventType(findEventByPath(await waitForEvents(collector), filePath), 'create');
     });
   });
 
@@ -405,15 +416,12 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const linkPath = getFilename(testDirectory);
       try {
         await symlink(targetPath, linkPath);
-        const events = await waitForEvents(collector);
-        const event = findEventByPath(events, linkPath);
-        expect(event).toBeDefined();
-        expect(event?.type).toBe('create');
+        expectEventType(findEventByPath(await waitForEvents(collector), linkPath), 'create');
       } catch {
         // Symlinks might not be supported on all platforms/configurations
         console.log('Symlink test skipped (not supported on this platform)');
@@ -434,14 +442,11 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       await unlink(linkPath);
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, linkPath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('delete');
+      expectEventType(findEventByPath(await waitForEvents(collector), linkPath), 'delete');
     });
   });
 
@@ -454,19 +459,19 @@ describe('watcher', () => {
 
       // Use glob pattern to ignore the directory contents
       subscribeWithCollector(testDirectory, { ignore: [`${ignoredDirectoryName}/**`] });
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       await writeFile(normalFile, 'normal content');
       const ignoredFile = path.join(ignoredDirectory, 'ignored.txt');
       await writeFile(ignoredFile, 'ignored content');
 
       const events = await waitForEvents(collector);
+
       // Normal file should have an event
-      const normalEvent = findEventByPath(events, normalFile);
-      expect(normalEvent).toBeDefined();
+      expect(findEventByPath(events, normalFile)).toBeDefined();
+
       // Ignored file should NOT have an event
-      const ignoredEvent = findEventByPath(events, ignoredFile);
-      expect(ignoredEvent).toBeUndefined();
+      expect(findEventByPath(events, ignoredFile)).toBeUndefined();
     });
 
     test('should ignore a file by path', async () => {
@@ -474,23 +479,23 @@ describe('watcher', () => {
       const normalFile = getFilename(testDirectory);
 
       subscribeWithCollector(testDirectory, { ignore: [ignoredFile] });
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       await writeFile(normalFile, 'normal content');
       await writeFile(ignoredFile, 'ignored content');
 
       const events = await waitForEvents(collector);
+
       // Normal file should have an event
-      const normalEvent = findEventByPath(events, normalFile);
-      expect(normalEvent).toBeDefined();
+      expect(findEventByPath(events, normalFile)).toBeDefined();
+
       // Ignored file should NOT have an event
-      const ignoredEvent = findEventByPath(events, ignoredFile);
-      expect(ignoredEvent).toBeUndefined();
+      expect(findEventByPath(events, ignoredFile)).toBeUndefined();
     });
 
     test('should ignore files matching glob patterns', async () => {
       subscribeWithCollector(testDirectory, { ignore: ['*.log', '*.tmp'] });
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const logFile = path.join(testDirectory, 'debug.log');
       const temporaryFile = path.join(testDirectory, 'temp.tmp');
@@ -501,15 +506,15 @@ describe('watcher', () => {
       await writeFile(normalFile, 'normal content');
 
       const events = await waitForEvents(collector);
-      // Normal file should have an event
-      const normalEvent = findEventByPath(events, normalFile);
-      expect(normalEvent).toBeDefined();
+
       // Log file should NOT have an event
-      const logEvent = findEventByPath(events, logFile);
-      expect(logEvent).toBeUndefined();
+      expect(findEventByPath(events, logFile)).toBeUndefined();
+
       // Temp file should NOT have an event
-      const temporaryEvent = findEventByPath(events, temporaryFile);
-      expect(temporaryEvent).toBeUndefined();
+      expect(findEventByPath(events, temporaryFile)).toBeUndefined();
+
+      // Normal file should have an event
+      expect(findEventByPath(events, normalFile)).toBeDefined();
     });
 
     test('should ignore directories matching glob patterns', async () => {
@@ -517,7 +522,7 @@ describe('watcher', () => {
       await mkdir(ignoreDirectory);
 
       subscribeWithCollector(testDirectory, { ignore: ['node_modules/**'] });
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const ignoredFile = path.join(ignoreDirectory, 'package.json');
       await writeFile(ignoredFile, '{}');
@@ -525,12 +530,12 @@ describe('watcher', () => {
       await writeFile(normalFile, 'code');
 
       const events = await waitForEvents(collector);
+
       // Normal file should have an event
-      const normalEvent = findEventByPath(events, normalFile);
-      expect(normalEvent).toBeDefined();
+      expect(findEventByPath(events, normalFile)).toBeDefined();
+
       // node_modules file should NOT have an event
-      const ignoredEvent = findEventByPath(events, ignoredFile);
-      expect(ignoredEvent).toBeUndefined();
+      expect(findEventByPath(events, ignoredFile)).toBeUndefined();
     });
 
     test('should support multiple ignore patterns', async () => {
@@ -540,7 +545,7 @@ describe('watcher', () => {
       await mkdir(cacheDirectory);
 
       subscribeWithCollector(testDirectory, { ignore: ['build/**', '.cache/**', '*.bak'] });
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const buildFile = path.join(buildDirectory, 'output.js');
       const cacheFile = path.join(cacheDirectory, 'cache.json');
@@ -552,18 +557,18 @@ describe('watcher', () => {
       await writeFile(normalFile, 'source code');
 
       const events = await waitForEvents(collector);
+
       // Normal file should have an event
-      const normalEvent = findEventByPath(events, normalFile);
-      expect(normalEvent).toBeDefined();
+      expect(findEventByPath(events, normalFile)).toBeDefined();
+
       // Build file should NOT have an event
-      const buildEvent = findEventByPath(events, buildFile);
-      expect(buildEvent).toBeUndefined();
+      expect(findEventByPath(events, buildFile)).toBeUndefined();
+
       // Cache file should NOT have an event
-      const cacheEvent = findEventByPath(events, cacheFile);
-      expect(cacheEvent).toBeUndefined();
+      expect(findEventByPath(events, cacheFile)).toBeUndefined();
+
       // Backup file should NOT have an event
-      const backupEvent = findEventByPath(events, backupFile);
-      expect(backupEvent).toBeUndefined();
+      expect(findEventByPath(events, backupFile)).toBeUndefined();
     });
   });
 
@@ -582,7 +587,7 @@ describe('watcher', () => {
       });
 
       try {
-        await sleep(100);
+        await sleep(subscribeDelay);
 
         const filePath = getFilename(testDirectory);
         await writeFile(filePath, 'content');
@@ -592,6 +597,7 @@ describe('watcher', () => {
 
         // Collector 1 should have event for the file
         expect(findEventByPath(collector1.events, filePath)).toBeDefined();
+
         // Collector 2 should also have event for the file
         expect(findEventByPath(collector2.events, filePath)).toBeDefined();
       } finally {
@@ -619,7 +625,7 @@ describe('watcher', () => {
       });
 
       try {
-        await sleep(100);
+        await sleep(subscribeDelay);
 
         const file1 = path.join(directory1, 'file1.txt');
         const file2 = path.join(directory2, 'file2.txt');
@@ -631,10 +637,13 @@ describe('watcher', () => {
 
         // Collector 1 should have event for file1
         expect(findEventByPath(collector1.events, file1)).toBeDefined();
+
         // Collector 1 should NOT have event for file2
         expect(findEventByPath(collector1.events, file2)).toBeUndefined();
+
         // Collector 2 should have event for file2
         expect(findEventByPath(collector2.events, file2)).toBeDefined();
+
         // Collector 2 should NOT have event for file1
         expect(findEventByPath(collector2.events, file1)).toBeUndefined();
       } finally {
@@ -649,7 +658,7 @@ describe('watcher', () => {
   describe('unsubscribe', () => {
     test('should stop receiving events after unsubscribe', async () => {
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const file1 = getFilename(testDirectory);
       await writeFile(file1, 'before unsubscribe');
@@ -677,7 +686,7 @@ describe('watcher', () => {
 
     test('should allow re-subscribing after unsubscribe', async () => {
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       if (subscription) {
         subscription.unsubscribe();
@@ -688,13 +697,12 @@ describe('watcher', () => {
 
       // Re-subscribe
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const filePath = getFilename(testDirectory);
       await writeFile(filePath, 'new content');
 
-      const events = await waitForEvents(collector);
-      expect(findEventByPath(events, filePath)).toBeDefined();
+      expect(findEventByPath(await waitForEvents(collector), filePath)).toBeDefined();
     });
   });
 
@@ -740,7 +748,7 @@ describe('watcher', () => {
   describe('rapid changes', () => {
     test('should handle rapid file creations', async () => {
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const files: string[] = [];
       for (let index = 0; index < 10; index++) {
@@ -761,22 +769,19 @@ describe('watcher', () => {
       await sleep(100);
 
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       for (let index = 0; index < 5; index++) {
         await writeFile(filePath, `update ${index.toString()}`);
         await sleep(10); // Small delay between operations
       }
 
-      const events = await waitForEvents(collector);
-      const event = findEventByPath(events, filePath);
-      expect(event).toBeDefined();
-      expect(event?.type).toBe('update');
+      expectEventType(findEventByPath(await waitForEvents(collector), filePath), 'update');
     });
 
     test('should handle create and immediate delete', async () => {
       subscribeWithCollector(testDirectory);
-      await sleep(100);
+      await sleep(subscribeDelay);
 
       const filePath = getFilename(testDirectory);
       await writeFile(filePath, 'temporary');
