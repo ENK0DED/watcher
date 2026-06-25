@@ -75,7 +75,7 @@ type WatchEvent = {
 ### Prerequisites
 
 - [Bun](https://bun.sh) >= 1.3.5
-- [Rust](https://rustup.rs) >= 1.92.0
+- [Rust](https://rustup.rs) >= 1.96.0
 - Node.js >= 24
 
 ### Building

@@ -2,7 +2,7 @@
 edition      = "2024"
 license      = "MIT"
 name         = "watcher"
-rust-version = "1.92.0"
+rust-version = "1.96.0"
 version      = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

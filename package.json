@@ -55,17 +55,17 @@
     "version": "napi version"
   },
   "devDependencies": {
-    "@napi-rs/cli": "^3.5.1",
+    "@napi-rs/cli": "^3.7.2",
     "@taplo/cli": "^0.7.0",
     "@types/bun": "latest",
-    "eslint": "^9.39.2",
+    "eslint": "^10.5.0",
     "eslint-config-enk0ded": "^1.5.0",
-    "globals": "^17.1.0",
-    "jiti": "^2.6.1",
-    "npm-run-all2": "^8.0.4",
-    "prettier": "^3.8.1",
-    "typescript": "^5.9.3",
-    "typescript-eslint": "^8.53.1"
+    "globals": "^17.7.0",
+    "jiti": "^2.7.0",
+    "npm-run-all2": "^9.0.2",
+    "prettier": "^3.8.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.62.0"
   },
-  "packageManager": "bun@1.3.5"
+  "packageManager": "bun@1.3.14"
 }
