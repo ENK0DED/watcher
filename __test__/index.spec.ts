@@ -44,7 +44,7 @@ const getFilename = (baseDirectory: string, ...subDirectories: string[]) =>
   path.join(baseDirectory, ...subDirectories, `test${(fileCounter++).toString()}${Math.random().toString(36).slice(2)}`);
 
 /** Result of findEventByPath - includes whether it was an exact match or parent directory match */
-type EventMatch = { event: WatchEvent; exact: boolean } | undefined;
+type EventMatch = undefined | { event: WatchEvent; exact: boolean };
 
 /** Find event by path (on Windows, also matches parent directory events) */
 const findEventByPath = (events: WatchEvent[], targetPath: string): EventMatch => {
@@ -66,7 +66,7 @@ const findEventByPath = (events: WatchEvent[], targetPath: string): EventMatch =
 };
 
 /** Check event type (skips type check on Windows when matched via parent directory) */
-const expectEventType = (match: EventMatch, expectedType: 'create' | 'update' | 'delete') => {
+const expectEventType = (match: EventMatch, expectedType: 'create' | 'delete' | 'update') => {
   expect(match).toBeDefined();
 
   if (match?.exact) {

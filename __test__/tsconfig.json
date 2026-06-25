@@ -3,7 +3,8 @@
   "compilerOptions": {
     "module": "ESNext",
     "outDir": "lib",
-    "rootDir": "."
+    "rootDir": ".",
+    "types": ["bun"]
   },
   "include": ["*.ts"],
   "exclude": ["lib"]

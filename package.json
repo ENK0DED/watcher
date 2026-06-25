@@ -1,6 +1,6 @@
 {
   "name": "@enk0ded/watcher",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "A high-performance file system watcher for Node.js, written in Rust and exposed via N-API bindings",
   "type": "module",
   "main": "index.js",
@@ -51,14 +51,14 @@
     "format:rs": "cargo fmt",
     "lint": "eslint --fix",
     "prepublishOnly": "napi prepublish -t npm",
-    "preversion": "napi build --platform && git add .",
+    "preversion": "napi build --platform --esm && git add .",
     "version": "napi version"
   },
   "devDependencies": {
     "@napi-rs/cli": "^3.7.2",
     "@taplo/cli": "^0.7.0",
     "@types/bun": "latest",
-    "eslint": "^10.5.0",
+    "eslint": "^9.39.4",
     "eslint-config-enk0ded": "^1.5.0",
     "globals": "^17.7.0",
     "jiti": "^2.7.0",
