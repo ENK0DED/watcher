@@ -1,12 +1,10 @@
-// eslint-disable-next-line n/no-missing-import
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, realpath, rename, rm, symlink, unlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-// eslint-disable-next-line n/no-missing-import, n/no-unpublished-import
-import { subscribe, type Subscription, type WatchEvent } from '../index.js';
+import { subscribe, type Subscription, type WatchEvent, type WatchOptions } from '../index.js';
 
 /** Counter for generating unique filenames */
 let fileCounter = 0;
@@ -74,42 +72,55 @@ const expectEventType = (match: EventMatch, expectedType: 'create' | 'delete' | 
   }
 };
 
-/** Check if any event matches the path */
-const hasEventWithPath = (events: WatchEvent[], targetPath: string) => events.some((event) => pathMatches(event.path, targetPath));
+/** Check that calling `fn` throws a plain `Error` (not a `TypeError`) whose message contains `message` */
+const expectPlainError = (fn: () => unknown, message: string) => {
+  let thrown: unknown;
+  try {
+    fn();
+  } catch (error) {
+    thrown = error;
+  }
+
+  expect(thrown).toBeInstanceOf(Error);
+  expect(thrown).not.toBeInstanceOf(TypeError);
+  expect((thrown as Error).message).toContain(message);
+};
 
 /** Helper to wait for events with timeout */
 const waitForEvents = (collector: { errors: Error[]; events: WatchEvent[] }, options: { minEvents?: number; timeout?: number } = {}): Promise<WatchEvent[]> => {
   const { minEvents = 1, timeout = 2000 } = options;
 
   return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      if (collector.events.length >= minEvents) {
-        resolve(collector.events);
-      } else {
-        reject(new Error(`Timeout waiting for events. Got ${collector.events.length.toString()}, expected ${minEvents.toString()}.`));
-      }
-    }, timeout);
+    const startTime = Date.now();
 
     const checkInterval = setInterval(async () => {
       if (collector.events.length >= minEvents) {
-        clearTimeout(timeoutId);
         clearInterval(checkInterval);
 
         // Give a small delay for any additional events to arrive
         await sleep(50);
 
         resolve(collector.events);
+      } else if (Date.now() - startTime >= timeout) {
+        clearInterval(checkInterval);
+        reject(new Error(`Timeout waiting for events. Got ${collector.events.length.toString()}, expected ${minEvents.toString()}.`));
       }
     }, 50);
   });
 };
 
+/** Callback for subscriptions whose events aren't checked */
+const noop = () => {
+  /* empty */
+};
+
+/** Create an empty collector for subscription callbacks */
+const createCollector = () => ({ errors: [] as Error[], events: [] as WatchEvent[] });
+
 describe('watcher', () => {
   let testDirectory: string;
   let subscription: Subscription | undefined;
   let collector: { errors: Error[]; events: WatchEvent[] };
-
-  const createCollector = () => ({ errors: [] as Error[], events: [] as WatchEvent[] });
 
   const subscribeWithCollector = (directory: string, options?: { ignore?: string[] }) => {
     collector = createCollector();
@@ -183,11 +194,10 @@ describe('watcher', () => {
 
       await rename(sourcePath, destinationPath);
 
-      // Renames can be reported as delete+create, or as update events depending on the platform
-      const events = await waitForEvents(collector);
-
-      // At least one of the paths should have an event - using toContain shows both values on failure
-      expect([hasEventWithPath(events, sourcePath), hasEventWithPath(events, destinationPath)]).toContain(true);
+      // Renames are reported as a delete of the old path and a create of the new one
+      const events = await waitForEvents(collector, { minEvents: 2 });
+      expectEventType(findEventByPath(events, sourcePath), 'delete');
+      expectEventType(findEventByPath(events, destinationPath), 'create');
     });
 
     test('should emit when a file is deleted', async () => {
@@ -241,11 +251,10 @@ describe('watcher', () => {
 
       await rename(sourcePath, destinationPath);
 
-      // Renames can be reported as delete+create, or as update events depending on the platform
-      const events = await waitForEvents(collector);
-
-      // At least one of the paths should have an event - using toContain shows both values on failure
-      expect([hasEventWithPath(events, sourcePath), hasEventWithPath(events, destinationPath)]).toContain(true);
+      // Renames are reported as a delete of the old path and a create of the new one
+      const events = await waitForEvents(collector, { minEvents: 2 });
+      expectEventType(findEventByPath(events, sourcePath), 'delete');
+      expectEventType(findEventByPath(events, destinationPath), 'create');
     });
 
     test('should emit when a directory is deleted', async () => {
@@ -321,11 +330,10 @@ describe('watcher', () => {
 
       await rename(sourcePath, destinationPath);
 
-      // Renames can be reported as delete+create, or as update events depending on the platform
-      const events = await waitForEvents(collector);
-
-      // At least one of the paths should have an event - using toContain shows both values on failure
-      expect([hasEventWithPath(events, sourcePath), hasEventWithPath(events, destinationPath)]).toContain(true);
+      // Renames are reported as a delete of the old path and a create of the new one
+      const events = await waitForEvents(collector, { minEvents: 2 });
+      expectEventType(findEventByPath(events, sourcePath), 'delete');
+      expectEventType(findEventByPath(events, destinationPath), 'create');
     });
 
     test('should emit when a sub-file is deleted', async () => {
@@ -356,11 +364,10 @@ describe('watcher', () => {
       const destinationPath = path.join(subDirectory, 'moved.txt');
       await rename(sourcePath, destinationPath);
 
-      // Moving files across directories generates events for both paths
-      const events = await waitForEvents(collector);
-
-      // At least one of the paths should have an event - using toContain shows both values on failure
-      expect([hasEventWithPath(events, sourcePath), hasEventWithPath(events, destinationPath)]).toContain(true);
+      // Moves are reported as a delete of the old path and a create of the new one
+      const events = await waitForEvents(collector, { minEvents: 2 });
+      expectEventType(findEventByPath(events, sourcePath), 'delete');
+      expectEventType(findEventByPath(events, destinationPath), 'create');
     });
   });
 
@@ -421,11 +428,13 @@ describe('watcher', () => {
       const linkPath = getFilename(testDirectory);
       try {
         await symlink(targetPath, linkPath);
-        expectEventType(findEventByPath(await waitForEvents(collector), linkPath), 'create');
       } catch {
         // Symlinks might not be supported on all platforms/configurations
         console.log('Symlink test skipped (not supported on this platform)');
+        return;
       }
+
+      expectEventType(findEventByPath(await waitForEvents(collector), linkPath), 'create');
     });
 
     test('should emit when a symlink is deleted', async () => {
@@ -471,6 +480,27 @@ describe('watcher', () => {
       expect(findEventByPath(events, normalFile)).toBeDefined();
 
       // Ignored file should NOT have an event
+      expect(findEventByPath(events, ignoredFile)).toBeUndefined();
+    });
+
+    test('should ignore the contents of a directory ignored by name', async () => {
+      const ignoreDirectory = path.join(testDirectory, 'node_modules', 'some-package');
+      await mkdir(ignoreDirectory, { recursive: true });
+
+      subscribeWithCollector(testDirectory, { ignore: ['node_modules'] });
+      await sleep(subscribeDelay);
+
+      const ignoredFile = path.join(ignoreDirectory, 'package.json');
+      await writeFile(ignoredFile, '{}');
+      const normalFile = path.join(testDirectory, 'index.js');
+      await writeFile(normalFile, 'code');
+
+      const events = await waitForEvents(collector);
+
+      // Normal file should have an event
+      expect(findEventByPath(events, normalFile)).toBeDefined();
+
+      // File inside the ignored directory should NOT have an event
       expect(findEventByPath(events, ignoredFile)).toBeUndefined();
     });
 
@@ -678,7 +708,8 @@ describe('watcher', () => {
       const file2 = getFilename(testDirectory);
       await writeFile(file2, 'after unsubscribe');
 
-      await sleep(100);
+      // Wait well past the 100ms debounce time, so an event that was still delivered would have arrived
+      await sleep(500);
 
       // Should not have received events for the second file
       expect(findEventByPath(collector.events, file2)).toBeUndefined();
@@ -707,41 +738,38 @@ describe('watcher', () => {
   });
 
   describe('errors', () => {
-    test('should throw for invalid directory argument', () => {
-      expect(() =>
-        subscribe('', () => {
-          /* empty */
-        }),
-      ).toThrow();
-
-      expect(() =>
-        subscribe(123 as unknown as string, () => {
-          /* empty */
-        }),
-      ).toThrow();
-    });
-
-    test('should throw TypeError for invalid callback', () => {
+    test('should throw a TypeError for arguments of the wrong type', () => {
+      expect(() => subscribe(123 as unknown as string, noop)).toThrow(TypeError);
+      expect(() => subscribe(undefined as unknown as string, noop)).toThrow(TypeError);
       expect(() => subscribe(testDirectory, 'not a function' as unknown as () => void)).toThrow(TypeError);
+      expect(() => subscribe(testDirectory, noop, 5 as unknown as WatchOptions)).toThrow(TypeError);
+      expect(() => subscribe(testDirectory, noop, { ignore: 5 as unknown as string[] })).toThrow(TypeError);
+      expect(() => subscribe(testDirectory, noop, { ignore: ['a', 1] as unknown as string[] })).toThrow(TypeError);
     });
 
-    test('should error if the watched directory does not exist', () => {
-      expect(() =>
-        subscribe(path.join(testDirectory, 'does-not-exist-' + Date.now().toString()), () => {
-          /* empty */
-        }),
-      ).toThrow();
+    test('should throw an Error for an empty directory path', () => {
+      expectPlainError(() => subscribe('', noop), 'Directory path cannot be empty');
     });
 
-    test('should error if the watched path is not a directory', async () => {
+    test('should throw an Error for an invalid ignore pattern', () => {
+      expectPlainError(() => subscribe(testDirectory, noop, { ignore: ['a[b'] }), 'Invalid glob pattern');
+    });
+
+    test('should throw an Error if the watched directory does not exist', () => {
+      expectPlainError(() => subscribe(path.join(testDirectory, 'does-not-exist-' + Date.now().toString()), noop), 'Directory does not exist');
+    });
+
+    test('should throw an Error if the watched path is not a directory', async () => {
       const filePath = path.join(testDirectory, 'not-a-dir.txt');
       await writeFile(filePath, 'content');
 
-      expect(() =>
-        subscribe(filePath, () => {
-          /* empty */
-        }),
-      ).toThrow();
+      expectPlainError(() => subscribe(filePath, noop), 'Path is not a directory');
+    });
+
+    test('should accept null or empty options', () => {
+      // oxlint-disable-next-line unicorn/no-null -- JavaScript callers may pass null for no options
+      subscribe(testDirectory, noop, null as unknown as WatchOptions).unsubscribe();
+      subscribe(testDirectory, noop, {}).unsubscribe();
     });
   });
 
@@ -809,6 +837,28 @@ describe('watcher', () => {
 
       expect(subscription).toBeDefined();
       expect(typeof subscription.unsubscribe).toBe('function');
+    });
+
+    test('should keep watching after an unreferenced subscription is garbage collected', async () => {
+      // This subscription can't be unsubscribed once collected, so it gets its own collector
+      const gcCollector = createCollector();
+      const collectedSubscription = new WeakRef(
+        subscribe(testDirectory, ({ error, events }) => {
+          if (error) gcCollector.errors.push(error);
+          else gcCollector.events.push(...events);
+        }),
+      );
+      await sleep(subscribeDelay);
+
+      Bun.gc(true);
+      await sleep(0);
+      Bun.gc(true);
+      expect(collectedSubscription.deref()).toBeUndefined();
+
+      const filePath = getFilename(testDirectory);
+      await writeFile(filePath, 'content');
+
+      expectEventType(findEventByPath(await waitForEvents(gcCollector), filePath), 'create');
     });
 
     test('unsubscribe should be callable multiple times without error', () => {

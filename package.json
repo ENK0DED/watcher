@@ -2,24 +2,48 @@
   "name": "@enk0ded/watcher",
   "version": "0.4.1",
   "description": "A high-performance file system watcher for Node.js, written in Rust and exposed via N-API bindings",
-  "type": "module",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "keywords": [
+    "file system",
+    "file system watcher",
+    "napi-rs",
+    "watcher"
+  ],
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/enk0ded/watcher"
+    "url": "https://github.com/ENK0DED/watcher"
   },
-  "license": "MIT",
-  "keywords": [
-    "watcher",
-    "file system watcher",
-    "file system",
-    "napi-rs"
-  ],
   "files": [
     "index.d.ts",
     "index.js"
   ],
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "artifacts": "napi artifacts",
+    "build": "napi build --platform --esm --release",
+    "build:debug": "napi build --platform --esm",
+    "create-npm-dirs": "napi create-npm-dirs",
+    "format": "oxfmt && cargo fmt",
+    "lint": "oxlint --fix",
+    "prepublishOnly": "napi prepublish -t npm",
+    "preversion": "napi build --platform --esm && git add .",
+    "typecheck": "tsc -p . && tsc -p __test__",
+    "version": "napi version"
+  },
+  "devDependencies": {
+    "@napi-rs/cli": "^3.10.9",
+    "@types/bun": "latest",
+    "oxfmt": "^0.75.0",
+    "oxlint": "^1.90.0",
+    "oxlint-tsgolint": "^7.0.2005",
+    "typescript": "^7.0.2"
+  },
   "napi": {
     "binaryName": "watcher",
     "targets": [
@@ -36,36 +60,5 @@
   "engines": {
     "node": ">=24"
   },
-  "publishConfig": {
-    "registry": "https://registry.npmjs.org/",
-    "access": "public"
-  },
-  "scripts": {
-    "artifacts": "napi artifacts",
-    "build": "napi build --platform --esm --release",
-    "build:debug": "napi build --platform --esm",
-    "create-npm-dirs": "napi create-npm-dirs",
-    "format": "run-p format:prettier format:rs format:toml",
-    "format:prettier": "prettier . -w",
-    "format:toml": "taplo format",
-    "format:rs": "cargo fmt",
-    "lint": "eslint --fix",
-    "prepublishOnly": "napi prepublish -t npm",
-    "preversion": "napi build --platform --esm && git add .",
-    "version": "napi version"
-  },
-  "devDependencies": {
-    "@napi-rs/cli": "^3.7.2",
-    "@taplo/cli": "^0.7.0",
-    "@types/bun": "latest",
-    "eslint": "^9.39.4",
-    "eslint-config-enk0ded": "^1.5.0",
-    "globals": "^17.7.0",
-    "jiti": "^2.7.0",
-    "npm-run-all2": "^9.0.2",
-    "prettier": "^3.8.4",
-    "typescript": "^6.0.3",
-    "typescript-eslint": "^8.62.0"
-  },
-  "packageManager": "bun@1.3.14"
+  "packageManager": "bun@1.4.4"
 }
