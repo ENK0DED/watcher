@@ -11,7 +11,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ENK0DED/watcher"
+    "url": "git+https://github.com/ENK0DED/watcher.git"
   },
   "files": [
     "index.d.ts",
